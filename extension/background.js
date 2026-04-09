@@ -222,18 +222,124 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== "tabb-tabignore" || !tab) return;
-
   try {
-    const parsed = new URL(tab.url);
-    const patterns = await getTabignorePatterns();
-    patterns.push({
-      type: "domain",
-      value: parsed.hostname,
-      label: parsed.hostname,
-    });
-    await chrome.storage.local.set({ tabignore: patterns });
-    console.log(`tabb: added ${parsed.hostname} to tabignore`);
+    await openTabignoreDialog(tab.id, tab.url);
   } catch (e) {
-    console.error("tabb: failed to add to tabignore:", e);
+    console.error("tabb: failed to open tabignore dialog:", e);
   }
 });
+
+// Find the first tabignore pattern that matches a URL
+function findMatchingPattern(url, patterns) {
+  if (!url) return null;
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+
+  for (let i = 0; i < patterns.length; i++) {
+    const p = patterns[i];
+    let matches = false;
+    switch (p.type) {
+      case "domain":
+        matches =
+          parsed.hostname === p.value ||
+          parsed.hostname.endsWith("." + p.value);
+        break;
+      case "domain_path": {
+        const parts = p.value.split("/");
+        const domain = parts[0];
+        const path = "/" + parts.slice(1).join("/");
+        matches =
+          (parsed.hostname === domain ||
+            parsed.hostname.endsWith("." + domain)) &&
+          parsed.pathname.startsWith(path);
+        break;
+      }
+      case "url":
+        matches = url === p.value || url.startsWith(p.value);
+        break;
+      case "regex":
+        try {
+          matches = new RegExp(p.value).test(url);
+        } catch {
+          // invalid regex
+        }
+        break;
+    }
+    if (matches) return { pattern: p, index: i };
+  }
+  return null;
+}
+
+// Handle messages from tabignore dialog and popup
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === "tabignore-add") {
+    getTabignorePatterns().then((patterns) => {
+      patterns.push(msg.pattern);
+      chrome.storage.local.set({ tabignore: patterns });
+      console.log(`tabb: added tabignore pattern: ${msg.pattern.value}`);
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+  if (msg.type === "tabignore-remove") {
+    getTabignorePatterns().then((patterns) => {
+      if (msg.index >= 0 && msg.index < patterns.length) {
+        const removed = patterns.splice(msg.index, 1)[0];
+        chrome.storage.local.set({ tabignore: patterns });
+        console.log(`tabb: removed tabignore pattern: ${removed.value}`);
+      }
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+  if (msg.type === "tabignore-check") {
+    getTabignorePatterns().then((patterns) => {
+      const match = findMatchingPattern(msg.url, patterns);
+      if (match) {
+        sendResponse({
+          ignored: true,
+          matchValue: match.pattern.value,
+          matchType: match.pattern.type,
+          matchIndex: match.index,
+        });
+      } else {
+        sendResponse({ ignored: false });
+      }
+    });
+    return true;
+  }
+  if (msg.type === "tabignore-open-dialog") {
+    openTabignoreDialog(msg.tabId, msg.url);
+    sendResponse({ ok: true });
+  }
+});
+
+// Open the injected tabignore dialog on a tab
+async function openTabignoreDialog(tabId, url) {
+  const patterns = await getTabignorePatterns();
+  const match = findMatchingPattern(url, patterns);
+
+  const config = {
+    url: url,
+    mode: match ? "ignored" : "add",
+  };
+  if (match) {
+    config.matchValue = match.pattern.value;
+    config.matchType = match.pattern.type;
+    config.matchIndex = match.index;
+  }
+
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["tabignore-dialog.js"],
+  });
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: (cfg) => showTabignoreDialog(cfg),
+    args: [config],
+  });
+}

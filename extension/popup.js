@@ -4,10 +4,57 @@ const patternType = document.getElementById("patternType");
 const patternValue = document.getElementById("patternValue");
 const addBtn = document.getElementById("addBtn");
 const regexWarning = document.getElementById("regexWarning");
+const ignoreTabBtn = document.getElementById("ignoreTabBtn");
+const alreadyIgnored = document.getElementById("alreadyIgnored");
+const ignoredPattern = document.getElementById("ignoredPattern");
+
+// Pre-fill from current tab and check if already ignored
+let presets = { domain: "", domain_path: "", url: "", regex: "" };
+let currentTab = null;
+
+chrome.tabs.query({ active: true, currentWindow: true }).then(async (tabs) => {
+  currentTab = tabs[0];
+  if (currentTab?.url) {
+    try {
+      const parsed = new URL(currentTab.url);
+      presets.domain = parsed.hostname;
+      presets.domain_path =
+        parsed.hostname + parsed.pathname.replace(/\/$/, "");
+      presets.url = currentTab.url;
+      presets.regex = "";
+      patternValue.value = presets[patternType.value];
+    } catch {
+      // not a valid URL
+    }
+
+    // Check if current tab is already ignored
+    const resp = await chrome.runtime.sendMessage({
+      type: "tabignore-check",
+      url: currentTab.url,
+    });
+    if (resp?.ignored) {
+      ignoreTabBtn.style.display = "none";
+      alreadyIgnored.style.display = "flex";
+      ignoredPattern.textContent = `${resp.matchValue} (${resp.matchType})`;
+    }
+  }
+});
+
+ignoreTabBtn.addEventListener("click", async () => {
+  if (!currentTab) return;
+  // Ask background to open the modal on the active tab
+  await chrome.runtime.sendMessage({
+    type: "tabignore-open-dialog",
+    tabId: currentTab.id,
+    url: currentTab.url,
+  });
+  window.close(); // close the popup
+});
 
 patternType.addEventListener("change", () => {
   regexWarning.style.display =
     patternType.value === "regex" ? "block" : "none";
+  patternValue.value = presets[patternType.value];
 });
 
 addBtn.addEventListener("click", async () => {

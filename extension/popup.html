@@ -75,6 +75,44 @@
       font-size: 13px;
     }
     .add-form button:hover { background: #1d4ed8; }
+    .ignore-tab-btn {
+      width: 100%;
+      padding: 8px 12px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 12px;
+    }
+    .ignore-tab-btn:hover { background: #1d4ed8; }
+    .already-ignored {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 8px;
+      background: #fef3c7;
+      border: 1px solid #f59e0b;
+      border-radius: 4px;
+      margin-bottom: 12px;
+      font-size: 12px;
+    }
+    .ignored-label { color: #92400e; font-weight: 500; }
+    .ignored-pattern {
+      font-family: monospace;
+      font-size: 11px;
+      color: #666;
+      word-break: break-all;
+    }
+    .section-label {
+      font-size: 11px;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
     .empty {
       color: #999;
       text-align: center;
@@ -90,10 +128,18 @@
 <body>
   <h2>tabb — tabignore</h2>
 
+  <button class="ignore-tab-btn" id="ignoreTabBtn">Ignore current tab</button>
+  <div class="already-ignored" id="alreadyIgnored" style="display:none">
+    <span class="ignored-label">Current tab is ignored</span>
+    <span class="ignored-pattern" id="ignoredPattern"></span>
+  </div>
+
+  <div class="section-label">Patterns</div>
   <div class="pattern-list" id="patternList">
     <div class="empty" id="emptyMsg">No tabignore patterns yet.</div>
   </div>
 
+  <div class="section-label">Add custom pattern</div>
   <div class="add-form">
     <select id="patternType">
       <option value="domain">Domain (e.g. bank.com)</option>

@@ -33,24 +33,22 @@ go build -o tabb ./cmd/tabb
 mv tabb /usr/local/bin/
 ```
 
-### 2. Set up Native Messaging
+### 2. Load the extension
+
+1. Open `chrome://extensions` in Chrome
+2. Enable **Developer mode** (toggle in top right)
+3. Click **Load unpacked** and select the `extension/` directory from this repo
+4. Note the **extension ID** shown on the extensions page
+
+### 3. Set up Native Messaging
 
 ```bash
 tabb setup
 ```
 
-This writes a Native Messaging manifest to your Chrome config directory and prints next steps.
+This writes a Native Messaging manifest to your Chrome config directory. It will prompt you to paste the extension ID from step 2 and writes it directly into the manifest. If you skip the prompt, you can re-run `tabb setup` later.
 
-### 3. Load the extension
-
-1. Open `chrome://extensions` in Chrome
-2. Enable **Developer mode** (toggle in top right)
-3. Click **Load unpacked** and select the `extension/` directory from this repo
-4. Copy the **extension ID** shown on the extensions page
-5. Edit the Native Messaging manifest (path shown by `tabb setup`) and replace `EXTENSION_ID_HERE` with your actual extension ID
-6. Click the reload button on the extension card
-
-The extension will connect to the native host, and the Unix socket will be created at `~/.tabb/tabb.sock`.
+Once setup is complete, reload the extension in Chrome. It will connect to the native host and the Unix socket will be created at `~/.tabb/tabb.sock`.
 
 ## Usage
 
