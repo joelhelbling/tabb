@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 type nativeManifest struct {
@@ -29,22 +31,6 @@ func runSetup() error {
 	}
 	binaryPath, _ = filepath.Abs(binaryPath)
 
-	manifest := nativeManifest{
-		Name:        "com.tabb",
-		Description: "tabb — manage Chrome tabs from the terminal",
-		Path:        binaryPath,
-		Type:        "stdio",
-		AllowedOrigins: []string{
-			// This will be updated with the actual extension ID after sideloading
-			"chrome-extension://EXTENSION_ID_HERE/",
-		},
-	}
-
-	manifestJSON, err := json.MarshalIndent(manifest, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshaling manifest: %w", err)
-	}
-
 	manifestDir, err := nativeMessagingDir()
 	if err != nil {
 		return err
@@ -55,21 +41,90 @@ func runSetup() error {
 	}
 
 	manifestPath := filepath.Join(manifestDir, "com.tabb.json")
-	if err := os.WriteFile(manifestPath, manifestJSON, 0644); err != nil {
-		return fmt.Errorf("writing manifest: %w", err)
+
+	// Check if manifest already exists with an extension ID
+	existingID := ""
+	if data, err := os.ReadFile(manifestPath); err == nil {
+		var existing nativeManifest
+		if json.Unmarshal(data, &existing) == nil && len(existing.AllowedOrigins) > 0 {
+			origin := existing.AllowedOrigins[0]
+			origin = strings.TrimPrefix(origin, "chrome-extension://")
+			origin = strings.TrimSuffix(origin, "/")
+			if origin != "" && origin != "EXTENSION_ID_HERE" {
+				existingID = origin
+			}
+		}
+	}
+
+	// Write initial manifest with placeholder
+	extensionID := "EXTENSION_ID_HERE"
+	if existingID != "" {
+		extensionID = existingID
+	}
+
+	if err := writeManifest(manifestPath, binaryPath, extensionID); err != nil {
+		return err
 	}
 
 	fmt.Printf("Native Messaging manifest written to:\n  %s\n\n", manifestPath)
 	fmt.Printf("Binary path: %s\n\n", binaryPath)
-	fmt.Println("Next steps:")
-	fmt.Println("  1. Load the extension in Chrome:")
-	fmt.Println("     - Open chrome://extensions")
-	fmt.Println("     - Enable 'Developer mode'")
-	fmt.Println("     - Click 'Load unpacked' and select the extension/ directory")
-	fmt.Println("  2. Copy the extension ID from the extensions page")
-	fmt.Println("  3. Update the 'allowed_origins' in the manifest file above")
-	fmt.Printf("     with: chrome-extension://YOUR_EXTENSION_ID/\n")
-	fmt.Println("  4. Reload the extension to establish the Native Messaging connection")
+
+	if existingID != "" {
+		fmt.Printf("Extension ID: %s (from existing manifest)\n\n", existingID)
+		fmt.Println("Setup complete. Reload the extension in Chrome to connect.")
+		return nil
+	}
+
+	// Guide user through extension setup
+	fmt.Println("Next, load the extension in Chrome:")
+	fmt.Println("  1. Open chrome://extensions")
+	fmt.Println("  2. Enable 'Developer mode' (toggle in top right)")
+	fmt.Println("  3. Click 'Load unpacked' and select the extension/ directory")
+	fmt.Println()
+
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Paste the extension ID from Chrome and press Enter: ")
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("reading input: %w", err)
+	}
+
+	extensionID = strings.TrimSpace(input)
+	if extensionID == "" {
+		fmt.Println("\nNo extension ID entered. You can re-run 'tabb setup' later to set it.")
+		return nil
+	}
+
+	// Update manifest with the real extension ID
+	if err := writeManifest(manifestPath, binaryPath, extensionID); err != nil {
+		return err
+	}
+
+	fmt.Printf("\nManifest updated with extension ID: %s\n", extensionID)
+	fmt.Println("Reload the extension in Chrome to establish the Native Messaging connection.")
+
+	return nil
+}
+
+func writeManifest(path, binaryPath, extensionID string) error {
+	manifest := nativeManifest{
+		Name:        "com.tabb",
+		Description: "tabb — manage Chrome tabs from the terminal",
+		Path:        binaryPath,
+		Type:        "stdio",
+		AllowedOrigins: []string{
+			fmt.Sprintf("chrome-extension://%s/", extensionID),
+		},
+	}
+
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling manifest: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("writing manifest: %w", err)
+	}
 
 	return nil
 }
