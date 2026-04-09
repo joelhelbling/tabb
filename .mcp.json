@@ -1,0 +1,6 @@
+{
+  "tabb": {
+    "command": "tabb",
+    "args": ["mcp"]
+  }
+}

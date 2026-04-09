@@ -1,5 +1,5 @@
-# Go
-tabb
+# Go build output
+/tabb
 *.exe
 *.test
 *.out

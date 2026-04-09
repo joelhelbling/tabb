@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      width: 360px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 13px;
+      margin: 0;
+      padding: 12px;
+      color: #333;
+    }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .pattern-list {
+      max-height: 240px;
+      overflow-y: auto;
+      margin-bottom: 12px;
+    }
+    .pattern {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 8px;
+      border-bottom: 1px solid #eee;
+    }
+    .pattern:last-child { border-bottom: none; }
+    .pattern-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .pattern-value {
+      font-family: monospace;
+      font-size: 12px;
+      word-break: break-all;
+    }
+    .pattern-type {
+      font-size: 10px;
+      color: #888;
+      text-transform: uppercase;
+    }
+    .pattern-remove {
+      background: none;
+      border: none;
+      color: #c00;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 0 4px;
+      margin-left: 8px;
+    }
+    .add-form {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      border-top: 1px solid #ddd;
+      padding-top: 12px;
+    }
+    .add-form select, .add-form input {
+      padding: 6px 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .add-form button {
+      padding: 6px 12px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .add-form button:hover { background: #1d4ed8; }
+    .empty {
+      color: #999;
+      text-align: center;
+      padding: 16px;
+    }
+    .warning {
+      font-size: 10px;
+      color: #b45309;
+      margin-top: 2px;
+    }
+  </style>
+</head>
+<body>
+  <h2>tabb — tabignore</h2>
+
+  <div class="pattern-list" id="patternList">
+    <div class="empty" id="emptyMsg">No tabignore patterns yet.</div>
+  </div>
+
+  <div class="add-form">
+    <select id="patternType">
+      <option value="domain">Domain (e.g. bank.com)</option>
+      <option value="domain_path">Domain + path (e.g. google.com/mail)</option>
+      <option value="url">Full URL</option>
+      <option value="regex">Regex (caveat emptor)</option>
+    </select>
+    <input type="text" id="patternValue" placeholder="Enter pattern...">
+    <div class="warning" id="regexWarning" style="display:none">
+      Regex patterns are powerful but can cause unexpected matches. Use with care.
+    </div>
+    <button id="addBtn">Add pattern</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
