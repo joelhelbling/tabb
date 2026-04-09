@@ -7,10 +7,10 @@ Manage Chrome browser tabs from the terminal or an AI assistant.
 ## Architecture
 
 ```
-┌──────────────┐  Native Messaging  ┌──────────────┐  Unix socket    ┌───────────┐
-│   Chrome     │──(stdin/stdout)───→│    tabb       │←───────────────│ CLI / MCP │
-│  Extension   │                    │  (Go binary)  │                │  clients  │
-└──────────────┘                    └──────────────┘                └───────────┘
+┌──────────────┐  Native Messaging  ┌───────────────┐  Unix socket  ┌───────────┐
+│   Chrome     │──(stdin/stdout)───→│    tabb       │←──────────────│ CLI / MCP │
+│  Extension   │                    │  (Go binary)  │               │  clients  │
+└──────────────┘                    └───────────────┘               └───────────┘
 ```
 
 A thin Chrome extension talks to a Go binary via Chrome's Native Messaging protocol. The binary also listens on a Unix domain socket so CLI commands and MCP clients can reach your tabs. No daemon, no open ports — the binary runs only while Chrome is open.
