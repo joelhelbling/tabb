@@ -8,24 +8,30 @@ import (
 	"path/filepath"
 )
 
-const (
-	dirName  = ".tabb"
-	sockName = "tabb.sock"
-)
+const dirName = ".tabb"
 
-// Path returns the full path to the Unix domain socket.
-func Path() (string, error) {
+// Dir returns the path to the tabb directory (~/.tabb).
+func Dir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("getting home directory: %w", err)
 	}
-	return filepath.Join(home, dirName, sockName), nil
+	return filepath.Join(home, dirName), nil
+}
+
+// Path returns the full path to the Unix domain socket for a given extension ID.
+func Path(extensionID string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("getting home directory: %w", err)
+	}
+	return filepath.Join(home, dirName, extensionID+".sock"), nil
 }
 
 // Listen creates the socket directory and starts listening on the Unix domain socket.
 // The socket file is created with mode 0600 (owner-only access).
-func Listen() (net.Listener, error) {
-	sockPath, err := Path()
+func Listen(extensionID string) (net.Listener, error) {
+	sockPath, err := Path(extensionID)
 	if err != nil {
 		return nil, err
 	}
@@ -56,21 +62,21 @@ func Listen() (net.Listener, error) {
 }
 
 // Dial connects to the Unix domain socket as a client.
-func Dial() (net.Conn, error) {
-	sockPath, err := Path()
+func Dial(extensionID string) (net.Conn, error) {
+	sockPath, err := Path(extensionID)
 	if err != nil {
 		return nil, err
 	}
 	conn, err := net.Dial("unix", sockPath)
 	if err != nil {
-		return nil, fmt.Errorf("connecting to tabb socket (is Chrome running with the tabb extension?): %w", err)
+		return nil, fmt.Errorf("connecting to tabb socket for extension %s (is Chrome running with the tabb extension?): %w", extensionID, err)
 	}
 	return conn, nil
 }
 
 // Cleanup removes the socket file.
-func Cleanup() error {
-	sockPath, err := Path()
+func Cleanup(extensionID string) error {
+	sockPath, err := Path(extensionID)
 	if err != nil {
 		return err
 	}
