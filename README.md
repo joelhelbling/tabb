@@ -122,12 +122,16 @@ This exposes three tools to Claude:
 
 ### Claude Code Plugin
 
-If you install tabb as a Claude Code plugin, the MCP server is configured automatically:
+This repo is a Claude Code plugin marketplace. Install the plugin and the MCP server is wired up automatically:
 
 ```
 /plugin marketplace add joelhelbling/tabb
 /plugin install tabb
 ```
+
+**Prerequisite**: the `tabb` binary must already be on your `$PATH` (install it via `go install`, `make install`, or the steps above). The plugin configures Claude Code to run `tabb mcp`; it does not install the binary itself. You also still need the Chrome extension loaded and `tabb setup` completed, same as for CLI use.
+
+The plugin also ships a skill that teaches Claude Code to reach for tabb whenever you mention the browser tabs you currently have open.
 
 ## Tabignore
 

@@ -1,0 +1,13 @@
+{
+  "name": "tabb",
+  "owner": {
+    "name": "Joel Helbling"
+  },
+  "plugins": [
+    {
+      "name": "tabb",
+      "source": "./plugins/tabb",
+      "description": "Manage Chrome browser tabs from Claude Code via the tabb MCP server"
+    }
+  ]
+}
