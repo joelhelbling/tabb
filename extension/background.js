@@ -23,6 +23,19 @@ function connect() {
   });
 
   console.log("tabb: connected to native host");
+
+  // Send handshake with browser info
+  const brands = navigator.userAgentData?.brands || [];
+  const browser = brands.find(b =>
+    ["Google Chrome", "Brave", "Microsoft Edge", "Opera", "Vivaldi"].includes(b.brand)
+  );
+  port.postMessage({
+    action: "handshake",
+    params: {
+      browser: browser?.brand || "Chrome",
+      extensionId: chrome.runtime.id
+    }
+  });
 }
 
 connect();
@@ -37,6 +50,8 @@ async function dispatch(msg) {
       return await showTab(msg);
     case "close_tab":
       return await closeTab(msg);
+    case "handshake":
+      return { id: msg.id, data: { ok: true } };
     default:
       return { id: msg.id, error: `unknown action: ${msg.action}` };
   }

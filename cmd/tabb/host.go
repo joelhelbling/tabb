@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 
@@ -14,6 +15,8 @@ import (
 	"github.com/joelhelbling/tabb/internal/protocol"
 	"github.com/joelhelbling/tabb/internal/socket"
 )
+
+var browserName string
 
 // runHost is the Native Messaging host entry point. Chrome launches this binary
 // and communicates over stdin/stdout. It also creates a Unix socket so CLI/MCP
@@ -72,6 +75,25 @@ func readFromExtension(pending *pendingRequests, extensionID string) {
 			os.Exit(0)
 		}
 
+		// First unmarshal as a generic map to detect handshake messages.
+		var raw map[string]any
+		if err := json.Unmarshal(msg, &raw); err != nil {
+			log.Printf("invalid message from extension: %v", err)
+			continue
+		}
+
+		if action, _ := raw["action"].(string); action == protocol.ActionHandshake {
+			if params, ok := raw["params"].(map[string]any); ok {
+				browser, _ := params["browser"].(string)
+				extID, _ := params["extensionId"].(string)
+				if browser != "" && extID != "" {
+					browserName = browser
+					saveBrowserName(extID, browser)
+				}
+			}
+			continue
+		}
+
 		var resp protocol.Response
 		if err := json.Unmarshal(msg, &resp); err != nil {
 			log.Printf("invalid response from extension: %v", err)
@@ -82,6 +104,18 @@ func readFromExtension(pending *pendingRequests, extensionID string) {
 			ch <- resp
 		}
 	}
+}
+
+// saveBrowserName writes the browser name to ~/.tabb/<extensionID>.browser
+// so that tabb setup and tabb profiles can read it.
+func saveBrowserName(extensionID, browser string) {
+	dir, err := socket.Dir()
+	if err != nil {
+		log.Printf("cannot save browser name: %v", err)
+		return
+	}
+	path := filepath.Join(dir, extensionID+".browser")
+	os.WriteFile(path, []byte(browser), 0644)
 }
 
 // handleSocketClient handles a single CLI or MCP client connection on the Unix socket.

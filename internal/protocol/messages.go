@@ -41,7 +41,8 @@ type TabContent struct {
 
 // Action constants matching the Chrome extension's message handler.
 const (
-	ActionListTabs = "list_tabs"
-	ActionShowTab  = "show_tab"
-	ActionCloseTab = "close_tab"
+	ActionListTabs  = "list_tabs"
+	ActionShowTab   = "show_tab"
+	ActionCloseTab  = "close_tab"
+	ActionHandshake = "handshake"
 )
