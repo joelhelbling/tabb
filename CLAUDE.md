@@ -21,7 +21,7 @@ cmd/tabb/            # Go CLI entrypoint
 internal/
   native/            # Native Messaging protocol (length-prefixed JSON)
   socket/            # Unix domain socket server
-  mcp/               # MCP protocol bridge
+  profile/           # Profile management (profiles.json, resolution)
   protocol/          # Shared message types
 extension/
   manifest.json      # Manifest V3
@@ -36,18 +36,28 @@ skills/
 
 - Go code uses standard library where possible
 - Extension is vanilla JS (no build step)
-- Unix socket path: `~/.tabb/tabb.sock`
+- Unix socket path: `~/.tabb/<extensionId>.sock` (one per browser/profile)
 - Native Messaging host name: `com.tabb`
 - CLI output: human-readable by default, `--json` flag for machine-readable
 - `show` outputs markdown with YAML frontmatter
 
 ## Commands
 
-- `tabb list` — list tab metadata
-- `tabb show <tab-id>` — page content as markdown (Readability mode), `--raw` for full DOM
-- `tabb close <tab-id>` — close a tab
+- `tabb [--profile <name>] list` — list tab metadata
+- `tabb [--profile <name>] show <tab-id>` — page content as markdown (Readability mode), `--raw` for full DOM
+- `tabb [--profile <name>] close <tab-id>` — close a tab
+- `tabb profiles` — list configured profiles and their status
 - `tabb mcp` — run as MCP stdio server
-- `tabb setup` — install Native Messaging host manifest
+- `tabb setup` — install Native Messaging host manifest and register a profile
+
+## Profiles
+
+tabb supports multiple browser profiles and Chrome-based browsers. Each extension installation
+gets its own named profile. Profile data is stored in `~/.tabb/profiles.json`.
+
+- Socket files: `~/.tabb/<extensionId>.sock`
+- Browser info: `~/.tabb/<extensionId>.browser` (written by native host on handshake)
+- Profile resolution: `--profile` flag > `TABB_PROFILE` env var > auto-detect (single socket)
 
 ## Claude Code Plugin
 
