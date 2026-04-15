@@ -10,10 +10,22 @@ import (
 	"strings"
 )
 
-// Map maps profile names to extension IDs.
-type Map map[string]string
+// Entry is a single profile record.
+type Entry struct {
+	ProfileID   string `json:"profileId"`
+	ExtensionID string `json:"extensionId"`
+	Browser     string `json:"browser,omitempty"`
+}
+
+// Map maps profile names to entries.
+type Map map[string]Entry
+
+// ErrLegacySchema is returned by Load when profiles.json is in the old
+// string-valued format and must be migrated by re-running `tabb setup`.
+var ErrLegacySchema = errors.New("profiles.json is in legacy format; re-run 'tabb setup' to migrate")
 
 // Load reads profiles.json from path. Returns an empty map if the file does not exist.
+// If the file is in the legacy (string-valued) format, returns ErrLegacySchema.
 func Load(path string) (Map, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -22,9 +34,25 @@ func Load(path string) (Map, error) {
 		}
 		return nil, fmt.Errorf("reading profiles: %w", err)
 	}
+
+	// Detect legacy format: values are raw JSON strings rather than objects.
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("parsing profiles: %w", err)
+	}
+	for _, v := range raw {
+		trimmed := strings.TrimSpace(string(v))
+		if len(trimmed) > 0 && trimmed[0] == '"' {
+			return nil, ErrLegacySchema
+		}
+	}
+
 	var m Map
 	if err := json.Unmarshal(data, &m); err != nil {
 		return nil, fmt.Errorf("parsing profiles: %w", err)
+	}
+	if m == nil {
+		m = Map{}
 	}
 	return m, nil
 }
@@ -42,22 +70,21 @@ func Save(path string, profiles Map) error {
 }
 
 // FindByName performs a case-insensitive lookup by profile name.
-// Returns the original-cased name, the extension ID, and whether it was found.
-func FindByName(profiles Map, name string) (string, string, bool) {
+// Returns the original-cased name, the entry, and whether it was found.
+func FindByName(profiles Map, name string) (string, Entry, bool) {
 	lower := strings.ToLower(name)
 	for k, v := range profiles {
 		if strings.ToLower(k) == lower {
 			return k, v, true
 		}
 	}
-	return "", "", false
+	return "", Entry{}, false
 }
 
-// FindByExtensionID performs a reverse lookup by extension ID.
-// Returns the profile name and whether it was found.
-func FindByExtensionID(profiles Map, extensionID string) (string, bool) {
-	for name, id := range profiles {
-		if id == extensionID {
+// FindByProfileID performs a reverse lookup by profile ID.
+func FindByProfileID(profiles Map, profileID string) (string, bool) {
+	for name, e := range profiles {
+		if e.ProfileID == profileID {
 			return name, true
 		}
 	}
@@ -70,14 +97,28 @@ func NameAvailable(profiles Map, name string) bool {
 	return !found
 }
 
+// ExtensionIDs returns the deduplicated set of extension IDs across all entries.
+// Used to populate allowed_origins in the Native Messaging host manifest.
+func ExtensionIDs(profiles Map) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, e := range profiles {
+		if e.ExtensionID == "" || seen[e.ExtensionID] {
+			continue
+		}
+		seen[e.ExtensionID] = true
+		out = append(out, e.ExtensionID)
+	}
+	return out
+}
+
 // ProfilesPath returns the path to profiles.json within tabbDir.
 func ProfilesPath(tabbDir string) string {
 	return filepath.Join(tabbDir, "profiles.json")
 }
 
-// ActiveSockets reads tabbDir and returns extension IDs from *.sock files.
-// Returns nil if the directory does not exist.
-// Skips the legacy tabb.sock file.
+// ActiveSockets reads tabbDir and returns profile IDs from *.sock files.
+// Returns nil if the directory does not exist. Skips the legacy tabb.sock file.
 func ActiveSockets(tabbDir string) ([]string, error) {
 	entries, err := os.ReadDir(tabbDir)
 	if err != nil {
@@ -106,7 +147,7 @@ func HasLegacySocket(tabbDir string) bool {
 	return err == nil
 }
 
-// Resolve determines which extension ID to connect to.
+// Resolve determines which profile ID to connect to.
 // Priority: flagProfile > envProfile > auto-detect from active sockets.
 func Resolve(tabbDir, profilesPath, flagProfile, envProfile string) (string, error) {
 	profileName := flagProfile
@@ -119,14 +160,13 @@ func Resolve(tabbDir, profilesPath, flagProfile, envProfile string) (string, err
 		if err != nil {
 			return "", err
 		}
-		_, id, found := FindByName(profiles, profileName)
+		_, entry, found := FindByName(profiles, profileName)
 		if !found {
 			return "", fmt.Errorf("profile %q not found in %s", profileName, profilesPath)
 		}
-		return id, nil
+		return entry.ProfileID, nil
 	}
 
-	// Auto-detect from active sockets
 	sockets, err := ActiveSockets(tabbDir)
 	if err != nil {
 		return "", err
@@ -143,18 +183,18 @@ func Resolve(tabbDir, profilesPath, flagProfile, envProfile string) (string, err
 	default:
 		profiles, err := Load(profilesPath)
 		if err != nil {
+			// If legacy, surface that — it's a better error than "multiple".
 			return "", err
 		}
 		return "", multipleProfilesError(sockets, profiles)
 	}
 }
 
-// multipleProfilesError formats an error listing all active profiles.
 func multipleProfilesError(socketIDs []string, profiles Map) error {
 	var sb strings.Builder
 	sb.WriteString("multiple active tabb profiles found; specify one with --profile or TABB_PROFILE:\n")
 	for _, id := range socketIDs {
-		if name, found := FindByExtensionID(profiles, id); found {
+		if name, found := FindByProfileID(profiles, id); found {
 			fmt.Fprintf(&sb, "  %s (%s)\n", name, id)
 		} else {
 			fmt.Fprintf(&sb, "  (unnamed) (%s)\n", id)
