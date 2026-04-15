@@ -78,40 +78,48 @@ func waitForHandshake(r io.Reader, timeout time.Duration) (HandshakeInfo, error)
 	return info, nil
 }
 
-var browserName string
-
 // runHost is the Native Messaging host entry point. Chrome launches this binary
-// and communicates over stdin/stdout. It also creates a Unix socket so CLI/MCP
-// clients can send requests that get forwarded to the extension.
-func runHost(extensionID string) error {
+// and communicates over stdin/stdout. The handshake is read first so we can
+// bind the Unix socket at the per-profile path (~/.tabb/<profileId>.sock).
+// The extensionID argument (from argv) is accepted but no longer used for
+// socket naming — it is kept only for log context.
+func runHost(extensionIDArg string) error {
 	log.SetOutput(os.Stderr)
 	log.SetPrefix("tabb-host: ")
 
-	// Track pending requests from socket clients awaiting extension responses
-	pending := &pendingRequests{
-		m: make(map[string]chan protocol.Response),
+	// Phase 1: wait for handshake. 5s is generous — the extension sends it
+	// immediately on connect.
+	info, err := waitForHandshake(os.Stdin, 5*time.Second)
+	if err != nil {
+		return fmt.Errorf("handshake failed: %w", err)
 	}
+	log.Printf("handshake: profileId=%s extensionId=%s browser=%s",
+		info.ProfileID, info.ExtensionID, info.Browser)
 
-	// Start reading from stdin (messages from the Chrome extension)
-	go readFromExtension(pending, extensionID)
+	// Persist browser info keyed by profileId so `tabb setup` can discover it.
+	saveBrowserInfo(info)
 
-	// Start the Unix socket server
-	ln, err := socket.Listen(extensionID)
+	// Phase 2: bind the socket at the per-profile path.
+	ln, err := socket.Listen(info.ProfileID)
 	if err != nil {
 		return fmt.Errorf("starting socket server: %w", err)
 	}
 	defer func() {
 		ln.Close()
-		socket.Cleanup(extensionID)
+		socket.Cleanup(info.ProfileID)
 	}()
 
-	// Handle graceful shutdown
+	pending := &pendingRequests{m: make(map[string]chan protocol.Response)}
+
+	// Start reading subsequent messages (responses to CLI requests) from the extension.
+	go readFromExtension(pending, info.ProfileID)
+
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		<-sigCh
 		ln.Close()
-		socket.Cleanup(extensionID)
+		socket.Cleanup(info.ProfileID)
 		os.Exit(0)
 	}()
 
@@ -127,33 +135,15 @@ func runHost(extensionID string) error {
 }
 
 // readFromExtension reads Native Messaging responses from the Chrome extension
-// on stdin and dispatches them to waiting socket clients.
-func readFromExtension(pending *pendingRequests, extensionID string) {
+// on stdin and dispatches them to waiting socket clients. By the time this
+// runs, the handshake has already been consumed in runHost.
+func readFromExtension(pending *pendingRequests, profileID string) {
 	for {
 		msg, err := native.ReadMessage(os.Stdin)
 		if err != nil {
 			log.Printf("extension disconnected: %v", err)
-			socket.Cleanup(extensionID)
+			socket.Cleanup(profileID)
 			os.Exit(0)
-		}
-
-		// First unmarshal as a generic map to detect handshake messages.
-		var raw map[string]any
-		if err := json.Unmarshal(msg, &raw); err != nil {
-			log.Printf("invalid message from extension: %v", err)
-			continue
-		}
-
-		if action, _ := raw["action"].(string); action == protocol.ActionHandshake {
-			if params, ok := raw["params"].(map[string]any); ok {
-				browser, _ := params["browser"].(string)
-				extID, _ := params["extensionId"].(string)
-				if browser != "" && extID != "" {
-					browserName = browser
-					saveBrowserName(extID, browser)
-				}
-			}
-			continue
 		}
 
 		var resp protocol.Response
@@ -168,16 +158,21 @@ func readFromExtension(pending *pendingRequests, extensionID string) {
 	}
 }
 
-// saveBrowserName writes the browser name to ~/.tabb/<extensionID>.browser
-// so that tabb setup and tabb profiles can read it.
-func saveBrowserName(extensionID, browser string) {
+// saveBrowserInfo writes ~/.tabb/<profileID>.browser containing the browser
+// name so that `tabb setup` can surface a sensible default profile name.
+func saveBrowserInfo(info HandshakeInfo) {
 	dir, err := socket.Dir()
 	if err != nil {
-		log.Printf("cannot save browser name: %v", err)
+		log.Printf("cannot save browser info: %v", err)
 		return
 	}
-	path := filepath.Join(dir, extensionID+".browser")
-	os.WriteFile(path, []byte(browser), 0644)
+	// File contents: "<browser>\n<extensionId>\n"
+	// setup.go parses both lines.
+	content := fmt.Sprintf("%s\n%s\n", info.Browser, info.ExtensionID)
+	path := filepath.Join(dir, info.ProfileID+".browser")
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		log.Printf("cannot write %s: %v", path, err)
+	}
 }
 
 // handleSocketClient handles a single CLI or MCP client connection on the Unix socket.
