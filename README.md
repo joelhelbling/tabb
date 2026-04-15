@@ -46,9 +46,18 @@ mv tabb /usr/local/bin/
 tabb setup
 ```
 
-This writes a Native Messaging manifest to your Chrome config directory. It will prompt you to paste the extension ID from step 2 and writes it directly into the manifest. If you skip the prompt, you can re-run `tabb setup` later.
+This writes a Native Messaging manifest to your Chrome config directory. It will prompt you to paste the extension ID from step 2 and ask you to name this profile (defaults to the browser name or "Default"). The extension ID and profile name are saved to `~/.tabb/profiles.json`.
 
-Once setup is complete, reload the extension in Chrome. It will connect to the native host and the Unix socket will be created at `~/.tabb/tabb.sock`.
+Once setup is complete, reload the extension in Chrome. It will connect to the native host and a Unix socket will be created at `~/.tabb/<extensionId>.sock`.
+
+#### Multiple browsers / profiles
+
+Run `tabb setup` once per browser or Chrome profile. Each gets its own named profile and socket. All extension IDs are accumulated in the Native Messaging manifest's `allowed_origins`.
+
+```bash
+tabb setup   # first profile → "Default" (or browser name)
+tabb setup   # second profile → prompted for a name, e.g. "Brave"
+```
 
 ## Usage
 
@@ -72,7 +81,24 @@ tabb show 12345 --raw
 
 # Close a tab
 tabb close 12345
+
+# List configured profiles
+tabb profiles
 ```
+
+#### Targeting a specific profile
+
+If you have multiple profiles, tabb auto-detects when only one is active. With multiple active profiles, specify which one:
+
+```bash
+# Via flag
+tabb --profile Brave list
+
+# Via environment variable
+TABB_PROFILE=Brave tabb list
+```
+
+The `--profile` flag takes precedence over `TABB_PROFILE`.
 
 ### MCP Server (for Claude Code)
 
@@ -123,7 +149,7 @@ Tabignore lets you hide sensitive tabs from tabb. Ignored tabs are filtered **in
 
 ## Security
 
-- **Unix socket** (`~/.tabb/tabb.sock`) has mode `0600` — only your user can connect. Same trust model as `~/.ssh`.
+- **Unix sockets** (`~/.tabb/<extensionId>.sock`) have mode `0600` — only your user can connect. Same trust model as `~/.ssh`.
 - **Tabignore filtering** happens in the extension before data leaves Chrome. Ignored tab URLs and content never reach the socket.
 - **No network exposure** — the binary uses Native Messaging (stdin/stdout) and a Unix domain socket. No TCP ports are opened.
 - **Extension permissions**: `tabs` (list tabs), `scripting` (read page content), `nativeMessaging`, `contextMenus`, `storage`. The `scripting` permission is required for content extraction and is only used by your local extension code.
