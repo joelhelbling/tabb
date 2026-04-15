@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -10,11 +12,71 @@ import (
 	"path/filepath"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/joelhelbling/tabb/internal/native"
 	"github.com/joelhelbling/tabb/internal/protocol"
 	"github.com/joelhelbling/tabb/internal/socket"
 )
+
+// HandshakeInfo is the data captured from the extension's handshake message.
+type HandshakeInfo struct {
+	ProfileID   string
+	ExtensionID string
+	Browser     string
+}
+
+// errHandshakeTimeout is returned by waitForHandshake when no message arrives
+// in time. Wrapped so tests can match it with errors.Is.
+var errHandshakeTimeout = errors.New("handshake timeout")
+
+// waitForHandshake reads a single Native Messaging message from r and requires
+// it to be a handshake containing a profileId. Any other first message is a
+// hard error — older extension builds that don't send a profileId will be
+// refused and the user will see a clear message to reinstall the extension.
+func waitForHandshake(r io.Reader, timeout time.Duration) (HandshakeInfo, error) {
+	type result struct {
+		msg []byte
+		err error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		msg, err := native.ReadMessage(r)
+		ch <- result{msg, err}
+	}()
+
+	var msg []byte
+	select {
+	case res := <-ch:
+		if res.err != nil {
+			return HandshakeInfo{}, fmt.Errorf("reading handshake: %w", res.err)
+		}
+		msg = res.msg
+	case <-time.After(timeout):
+		return HandshakeInfo{}, errHandshakeTimeout
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(msg, &raw); err != nil {
+		return HandshakeInfo{}, fmt.Errorf("parsing handshake: %w", err)
+	}
+	action, _ := raw["action"].(string)
+	if action != protocol.ActionHandshake {
+		return HandshakeInfo{}, fmt.Errorf("expected handshake as first message, got %q (extension may be out of date — reinstall from extension/)", action)
+	}
+	params, _ := raw["params"].(map[string]any)
+	if params == nil {
+		return HandshakeInfo{}, fmt.Errorf("handshake missing params")
+	}
+	info := HandshakeInfo{}
+	info.ProfileID, _ = params["profileId"].(string)
+	info.ExtensionID, _ = params["extensionId"].(string)
+	info.Browser, _ = params["browser"].(string)
+	if info.ProfileID == "" {
+		return HandshakeInfo{}, fmt.Errorf("handshake missing profileId (extension may be out of date — reinstall from extension/)")
+	}
+	return info, nil
+}
 
 var browserName string
 
