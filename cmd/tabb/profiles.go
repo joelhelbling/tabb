@@ -1,18 +1,15 @@
 package main
 
 import (
+	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-	"text/tabwriter"
+	"sort"
 
 	"github.com/joelhelbling/tabb/internal/profile"
-	"github.com/joelhelbling/tabb/internal/socket"
 )
 
 func runProfiles() error {
-	tabbDir, err := socket.Dir()
+	tabbDir, err := tabbHomeDir()
 	if err != nil {
 		return err
 	}
@@ -20,57 +17,40 @@ func runProfiles() error {
 
 	profiles, err := profile.Load(profilesPath)
 	if err != nil {
+		if errors.Is(err, profile.ErrLegacySchema) {
+			fmt.Println("profiles.json is in the legacy format — run 'tabb setup' to migrate.")
+			return nil
+		}
 		return err
 	}
 
-	activeSockets, err := profile.ActiveSockets(tabbDir)
+	active, err := profile.ActiveSockets(tabbDir)
 	if err != nil {
 		return err
 	}
-
-	activeSet := make(map[string]bool)
-	for _, id := range activeSockets {
+	activeSet := map[string]bool{}
+	for _, id := range active {
 		activeSet[id] = true
 	}
 
-	if len(profiles) == 0 && len(activeSockets) == 0 {
-		fmt.Println("No profiles configured. Run 'tabb setup' to add one.")
+	if len(profiles) == 0 {
+		fmt.Println("No profiles configured. Run 'tabb setup' to register one.")
 		return nil
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tBROWSER\tSTATUS\tEXTENSION ID")
+	names := make([]string, 0, len(profiles))
+	for n := range profiles {
+		names = append(names, n)
+	}
+	sort.Strings(names)
 
-	// Show named profiles
-	for name, extID := range profiles {
+	for _, name := range names {
+		e := profiles[name]
 		status := "inactive"
-		if activeSet[extID] {
+		if activeSet[e.ProfileID] {
 			status = "active"
-			delete(activeSet, extID)
 		}
-		browser := readBrowserName(tabbDir, extID)
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", name, browser, status, extID)
+		fmt.Printf("%-20s  %-10s  %-36s  %s\n", name, e.Browser, e.ProfileID, status)
 	}
-
-	// Show unnamed active sockets
-	for id := range activeSet {
-		browser := readBrowserName(tabbDir, id)
-		fmt.Fprintf(w, "(unnamed)\t%s\tactive\t%s\n", browser, id)
-	}
-
-	w.Flush()
 	return nil
-}
-
-// readBrowserName reads the .browser file for a given extension ID.
-func readBrowserName(tabbDir, extensionID string) string {
-	data, err := os.ReadFile(filepath.Join(tabbDir, extensionID+".browser"))
-	if err != nil {
-		return "—"
-	}
-	name := strings.TrimSpace(string(data))
-	if name == "" {
-		return "—"
-	}
-	return name
 }
