@@ -222,3 +222,17 @@ func TestResolveNoSockets(t *testing.T) {
 		t.Errorf("expected 'no active tabb sockets found' error, got: %v", err)
 	}
 }
+
+func TestResolveLegacySocket(t *testing.T) {
+	dir := t.TempDir()
+	// Create the old-style tabb.sock
+	os.WriteFile(filepath.Join(dir, "tabb.sock"), []byte{}, 0600)
+
+	_, err := profile.Resolve(dir, filepath.Join(dir, "profiles.json"), "", "")
+	if err == nil {
+		t.Fatal("expected error for legacy socket")
+	}
+	if !strings.Contains(err.Error(), "tabb setup") {
+		t.Errorf("expected migration hint in error, got: %v", err)
+	}
+}
