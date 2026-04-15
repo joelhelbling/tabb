@@ -3,12 +3,15 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/joelhelbling/tabb/internal/profile"
 )
 
 type nativeManifest struct {
@@ -19,8 +22,15 @@ type nativeManifest struct {
 	AllowedOrigins []string `json:"allowed_origins"`
 }
 
+// discoveredProfile is a profileId seen in ~/.tabb/*.browser but not yet
+// present in profiles.json.
+type discoveredProfile struct {
+	ProfileID   string
+	ExtensionID string
+	Browser     string
+}
+
 func runSetup() error {
-	// Find the tabb binary path
 	binaryPath, err := exec.LookPath("tabb")
 	if err != nil {
 		binaryPath, err = os.Executable()
@@ -46,86 +56,174 @@ func runSetup() error {
 		return fmt.Errorf("creating tabb directory: %w", err)
 	}
 
-	profilesPath := filepath.Join(tabbDir, "profiles.json")
-	profiles, err := loadProfiles(profilesPath)
+	profilesPath := profile.ProfilesPath(tabbDir)
+	profiles, err := profile.Load(profilesPath)
 	if err != nil {
+		if errors.Is(err, profile.ErrLegacySchema) {
+			return migrateLegacyProfiles(tabbDir, profilesPath)
+		}
 		return err
 	}
 
 	reader := bufio.NewReader(os.Stdin)
 
-	// Guide user through extension setup
+	// On first run we still need to place the Native Messaging manifest so the
+	// browser can even launch the host. Write it now using whatever extension IDs
+	// we have (possibly none); we'll rewrite it at the end too.
+	manifestPath := filepath.Join(manifestDir, "com.tabb.json")
+	if err := writeManifest(manifestPath, binaryPath, profile.ExtensionIDs(profiles)); err != nil {
+		return err
+	}
+
 	fmt.Println("Load the extension in your browser:")
 	fmt.Println("  1. Open chrome://extensions (or equivalent)")
 	fmt.Println("  2. Enable 'Developer mode' (toggle in top right)")
 	fmt.Println("  3. Click 'Load unpacked' and select the extension/ directory")
+	fmt.Println("  4. If it's already loaded, click its reload icon")
 	fmt.Println()
-
-	fmt.Print("Paste the extension ID and press Enter: ")
-	input, err := reader.ReadString('\n')
-	if err != nil {
+	if len(profiles) > 0 {
+		fmt.Println("Registered profiles:")
+		for name, e := range profiles {
+			fmt.Printf("  %s  (%s)\n", name, e.Browser)
+		}
+		fmt.Println()
+	}
+	fmt.Print("Press Enter when the extension is loaded/reloaded: ")
+	if _, err := reader.ReadString('\n'); err != nil {
 		return fmt.Errorf("reading input: %w", err)
 	}
-	extensionID := strings.TrimSpace(input)
-	if extensionID == "" {
-		fmt.Println("\nNo extension ID entered. You can re-run 'tabb setup' later.")
+
+	discovered, err := discoverNewProfiles(tabbDir, profiles)
+	if err != nil {
+		return err
+	}
+	if len(discovered) == 0 {
+		fmt.Println("\nNo new profiles detected.")
+		fmt.Println("Make sure the extension is loaded and the browser is running,")
+		fmt.Println("then re-run 'tabb setup'.")
 		return nil
 	}
 
-	// Check if this extension ID is already registered
-	if existingName, found := findProfileByExtID(profiles, extensionID); found {
-		fmt.Printf("\nExtension ID already registered as profile %q.\n", existingName)
-		fmt.Println("Reload the extension to connect.")
-		return nil
+	for _, d := range discovered {
+		fmt.Printf("\nNew profile detected: browser=%s profileId=%s\n", d.Browser, d.ProfileID)
+		defaultName := suggestProfileName(profiles, d.Browser)
+		var prompt string
+		if defaultName != "" {
+			prompt = fmt.Sprintf("Profile name [%s]: ", defaultName)
+		} else {
+			prompt = "Profile name: "
+		}
+		fmt.Print(prompt)
+		nameInput, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("reading input: %w", err)
+		}
+		profileName := strings.TrimSpace(nameInput)
+		if profileName == "" {
+			profileName = defaultName
+		}
+		if profileName == "" {
+			return fmt.Errorf("profile name is required")
+		}
+		if !profile.NameAvailable(profiles, profileName) {
+			return fmt.Errorf("profile name %q is already in use (case-insensitive)", profileName)
+		}
+		profiles[profileName] = profile.Entry{
+			ProfileID:   d.ProfileID,
+			ExtensionID: d.ExtensionID,
+			Browser:     d.Browser,
+		}
+		fmt.Printf("Registered %q\n", profileName)
 	}
 
-	// Suggest a profile name
-	defaultName := suggestProfileName(tabbDir, extensionID, profiles)
-	if defaultName != "" {
-		fmt.Printf("Profile name [%s]: ", defaultName)
-	} else {
-		fmt.Print("Profile name: ")
-	}
-	nameInput, err := reader.ReadString('\n')
-	if err != nil {
-		return fmt.Errorf("reading input: %w", err)
-	}
-	profileName := strings.TrimSpace(nameInput)
-	if profileName == "" {
-		profileName = defaultName
-	}
-	if profileName == "" {
-		return fmt.Errorf("profile name is required")
-	}
-
-	// Check for name conflicts (case-insensitive)
-	if !isNameAvailable(profiles, profileName) {
-		return fmt.Errorf("profile name %q is already in use (case-insensitive)", profileName)
-	}
-
-	// Save profile
-	profiles[profileName] = extensionID
-	if err := saveProfiles(profilesPath, profiles); err != nil {
+	if err := profile.Save(profilesPath, profiles); err != nil {
 		return err
 	}
 
-	// Write manifest with ALL registered extension IDs
-	manifestPath := filepath.Join(manifestDir, "com.tabb.json")
-	if err := writeManifest(manifestPath, binaryPath, allExtensionIDs(profiles)); err != nil {
+	// Rewrite the manifest with the full set of extension IDs.
+	if err := writeManifest(manifestPath, binaryPath, profile.ExtensionIDs(profiles)); err != nil {
 		return err
 	}
 
-	fmt.Printf("\nProfile %q registered with extension ID: %s\n", profileName, extensionID)
+	fmt.Printf("\nSaved %s\n", profilesPath)
 	fmt.Printf("Manifest updated: %s\n", manifestPath)
-	fmt.Println("Reload the extension in your browser to establish the connection.")
+	fmt.Println("You can now run 'tabb list' (or use the MCP tools).")
+	return nil
+}
 
+// discoverNewProfiles scans tabbDir for *.browser files whose profileId is not
+// already registered in profiles. Each .browser file is written by the native
+// host on handshake and contains "<browser>\n<extensionId>\n".
+func discoverNewProfiles(tabbDir string, profiles profile.Map) ([]discoveredProfile, error) {
+	entries, err := os.ReadDir(tabbDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("reading tabb directory: %w", err)
+	}
+
+	registered := map[string]bool{}
+	for _, e := range profiles {
+		registered[e.ProfileID] = true
+	}
+
+	var out []discoveredProfile
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasSuffix(name, ".browser") {
+			continue
+		}
+		profileID := strings.TrimSuffix(name, ".browser")
+		if registered[profileID] {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(tabbDir, name))
+		if err != nil {
+			continue
+		}
+		lines := strings.SplitN(strings.TrimRight(string(data), "\n"), "\n", 2)
+		browser := ""
+		extensionID := ""
+		if len(lines) > 0 {
+			browser = lines[0]
+		}
+		if len(lines) > 1 {
+			extensionID = lines[1]
+		}
+		out = append(out, discoveredProfile{
+			ProfileID:   profileID,
+			ExtensionID: extensionID,
+			Browser:     browser,
+		})
+	}
+	return out, nil
+}
+
+// migrateLegacyProfiles handles the case where profiles.json is in the old
+// string-valued schema. We cannot automatically map old extensionIDs to new
+// profileIDs, so we move the old file aside and ask the user to re-run setup.
+func migrateLegacyProfiles(tabbDir, profilesPath string) error {
+	backup := profilesPath + ".legacy"
+	if err := os.Rename(profilesPath, backup); err != nil {
+		return fmt.Errorf("moving legacy profiles.json aside: %w", err)
+	}
+	entries, _ := os.ReadDir(tabbDir)
+	for _, e := range entries {
+		name := e.Name()
+		if strings.HasSuffix(name, ".sock") || strings.HasSuffix(name, ".browser") {
+			os.Remove(filepath.Join(tabbDir, name))
+		}
+	}
+	fmt.Printf("Legacy profiles.json moved to %s\n", backup)
+	fmt.Println("Re-run 'tabb setup' after reloading the extension in each browser profile.")
 	return nil
 }
 
 func writeManifest(path, binaryPath string, extensionIDs []string) error {
-	origins := make([]string, len(extensionIDs))
-	for i, id := range extensionIDs {
-		origins[i] = fmt.Sprintf("chrome-extension://%s/", id)
+	origins := make([]string, 0, len(extensionIDs))
+	for _, id := range extensionIDs {
+		origins = append(origins, fmt.Sprintf("chrome-extension://%s/", id))
 	}
 
 	manifest := nativeManifest{
@@ -151,7 +249,6 @@ func nativeMessagingDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("getting home directory: %w", err)
 	}
-
 	switch runtime.GOOS {
 	case "darwin":
 		return filepath.Join(home, "Library", "Application Support", "Google", "Chrome", "NativeMessagingHosts"), nil
@@ -170,89 +267,25 @@ func tabbHomeDir() (string, error) {
 	return filepath.Join(home, ".tabb"), nil
 }
 
-func loadProfiles(path string) (map[string]string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return map[string]string{}, nil
-		}
-		return nil, fmt.Errorf("reading profiles: %w", err)
-	}
-	var m map[string]string
-	if err := json.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("parsing profiles: %w", err)
-	}
-	return m, nil
-}
-
-func saveProfiles(path string, profiles map[string]string) error {
-	data, err := json.MarshalIndent(profiles, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshaling profiles: %w", err)
-	}
-	return os.WriteFile(path, data, 0644)
-}
-
-func findProfileByExtID(profiles map[string]string, extID string) (string, bool) {
-	for name, id := range profiles {
-		if id == extID {
-			return name, true
-		}
-	}
-	return "", false
-}
-
-func isNameAvailable(profiles map[string]string, name string) bool {
-	lower := strings.ToLower(name)
-	for k := range profiles {
-		if strings.ToLower(k) == lower {
-			return false
-		}
-	}
-	return true
-}
-
-func allExtensionIDs(profiles map[string]string) []string {
-	ids := make([]string, 0, len(profiles))
-	for _, id := range profiles {
-		ids = append(ids, id)
-	}
-	return ids
-}
-
-// suggestProfileName reads the .browser file (written by the native host
-// after a handshake) and suggests a default profile name.
-func suggestProfileName(tabbDir, extensionID string, profiles map[string]string) string {
-	// Try reading browser name from handshake file
-	data, err := os.ReadFile(filepath.Join(tabbDir, extensionID+".browser"))
-	browserName := ""
-	if err == nil {
-		browserName = strings.TrimSpace(string(data))
-	}
-
-	// If first profile ever, default to "Default"
+// suggestProfileName picks a default based on the browser name, falling back
+// to "Default" for the first profile or a numbered suffix thereafter.
+func suggestProfileName(profiles profile.Map, browser string) string {
 	if len(profiles) == 0 {
-		if browserName != "" {
-			return browserName
+		if browser != "" {
+			return browser
 		}
 		return "Default"
 	}
-
-	// Try browser name if available and not taken
-	if browserName != "" && isNameAvailable(profiles, browserName) {
-		return browserName
+	if browser != "" && profile.NameAvailable(profiles, browser) {
+		return browser
 	}
-
-	// Try browser name with incrementing suffix
-	if browserName != "" {
+	if browser != "" {
 		for i := 2; i <= 99; i++ {
-			candidate := fmt.Sprintf("%s-%d", browserName, i)
-			if isNameAvailable(profiles, candidate) {
+			candidate := fmt.Sprintf("%s-%d", browser, i)
+			if profile.NameAvailable(profiles, candidate) {
 				return candidate
 			}
 		}
 	}
-
-	// No good default — user must choose
 	return ""
 }
