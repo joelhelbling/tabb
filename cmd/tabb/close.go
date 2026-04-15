@@ -7,7 +7,7 @@ import (
 	"github.com/joelhelbling/tabb/internal/protocol"
 )
 
-func runClose(args []string) error {
+func runClose(args []string, profileFlag string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: tabb close <tab-id>")
 	}
@@ -21,7 +21,7 @@ func runClose(args []string) error {
 		"tabId": tabID,
 	}
 
-	_, err = sendRequest(protocol.ActionCloseTab, params)
+	_, err = sendRequest(protocol.ActionCloseTab, params, profileFlag)
 	if err != nil {
 		return err
 	}
