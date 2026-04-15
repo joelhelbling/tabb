@@ -4,7 +4,17 @@
 const NATIVE_HOST = "com.tabb";
 let port = null;
 
-function connect() {
+async function getOrCreateProfileId() {
+  const { tabbProfileId } = await chrome.storage.local.get("tabbProfileId");
+  if (tabbProfileId) return tabbProfileId;
+  const newId = crypto.randomUUID();
+  await chrome.storage.local.set({ tabbProfileId: newId });
+  return newId;
+}
+
+async function connect() {
+  const profileId = await getOrCreateProfileId();
+
   port = chrome.runtime.connectNative(NATIVE_HOST);
 
   port.onMessage.addListener((msg) => {
@@ -24,17 +34,18 @@ function connect() {
 
   console.log("tabb: connected to native host");
 
-  // Send handshake with browser info
+  // Send handshake with browser info and per-profile UUID
   const brands = navigator.userAgentData?.brands || [];
-  const browser = brands.find(b =>
+  const browser = brands.find((b) =>
     ["Google Chrome", "Brave", "Microsoft Edge", "Opera", "Vivaldi"].includes(b.brand)
   );
   port.postMessage({
     action: "handshake",
     params: {
+      profileId: profileId,
       browser: browser?.brand || "Chrome",
-      extensionId: chrome.runtime.id
-    }
+      extensionId: chrome.runtime.id,
+    },
   });
 }
 
