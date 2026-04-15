@@ -77,6 +77,7 @@ func ProfilesPath(tabbDir string) string {
 
 // ActiveSockets reads tabbDir and returns extension IDs from *.sock files.
 // Returns nil if the directory does not exist.
+// Skips the legacy tabb.sock file.
 func ActiveSockets(tabbDir string) ([]string, error) {
 	entries, err := os.ReadDir(tabbDir)
 	if err != nil {
@@ -88,16 +89,21 @@ func ActiveSockets(tabbDir string) ([]string, error) {
 
 	var ids []string
 	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
 		name := e.Name()
+		if name == "tabb.sock" {
+			continue // legacy socket, skip
+		}
 		if strings.HasSuffix(name, ".sock") {
-			id := strings.TrimSuffix(name, ".sock")
-			ids = append(ids, id)
+			ids = append(ids, strings.TrimSuffix(name, ".sock"))
 		}
 	}
 	return ids, nil
+}
+
+// HasLegacySocket returns true if the old-style tabb.sock exists.
+func HasLegacySocket(tabbDir string) bool {
+	_, err := os.Stat(filepath.Join(tabbDir, "tabb.sock"))
+	return err == nil
 }
 
 // Resolve determines which extension ID to connect to.
@@ -128,7 +134,10 @@ func Resolve(tabbDir, profilesPath, flagProfile, envProfile string) (string, err
 
 	switch len(sockets) {
 	case 0:
-		return "", errors.New("no active tabb sockets found (is Chrome running with the tabb extension?)")
+		if HasLegacySocket(tabbDir) {
+			return "", fmt.Errorf("found legacy tabb.sock — run 'tabb setup' to migrate to the new multi-profile format")
+		}
+		return "", fmt.Errorf("no active tabb sockets found (is Chrome running with the tabb extension?)")
 	case 1:
 		return sockets[0], nil
 	default:
