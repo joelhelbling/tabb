@@ -8,7 +8,7 @@ import (
 	"github.com/joelhelbling/tabb/internal/protocol"
 )
 
-func runList(args []string) error {
+func runList(args []string, profileFlag string) error {
 	asJSON := false
 	var filter string
 
@@ -26,7 +26,7 @@ func runList(args []string) error {
 		params["filter"] = filter
 	}
 
-	resp, err := sendRequest(protocol.ActionListTabs, params)
+	resp, err := sendRequest(protocol.ActionListTabs, params, profileFlag)
 	if err != nil {
 		return err
 	}

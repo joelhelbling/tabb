@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/joelhelbling/tabb/internal/protocol"
-	"github.com/joelhelbling/tabb/internal/socket"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -62,7 +61,7 @@ func runMCP() error {
 }
 
 func mcpRequest(action string, params map[string]any) (*protocol.Response, error) {
-	conn, err := socket.Dial()
+	conn, err := resolveAndDial("")
 	if err != nil {
 		return nil, err
 	}

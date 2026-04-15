@@ -8,7 +8,7 @@ import (
 	"github.com/joelhelbling/tabb/internal/protocol"
 )
 
-func runShow(args []string) error {
+func runShow(args []string, profileFlag string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: tabb show <tab-id> [--raw]")
 	}
@@ -35,7 +35,7 @@ func runShow(args []string) error {
 		"raw":   raw,
 	}
 
-	resp, err := sendRequest(protocol.ActionShowTab, params)
+	resp, err := sendRequest(protocol.ActionShowTab, params, profileFlag)
 	if err != nil {
 		return err
 	}
