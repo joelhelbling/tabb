@@ -15,7 +15,9 @@ func main() {
 	// Chrome launches the native host with the extension origin as the first arg
 	// (e.g., "chrome-extension://abcdef123456/"). Detect this and run as host.
 	if strings.HasPrefix(os.Args[1], "chrome-extension://") {
-		if err := runHost(); err != nil {
+		extID := strings.TrimPrefix(os.Args[1], "chrome-extension://")
+		extID = strings.TrimSuffix(extID, "/")
+		if err := runHost(extID); err != nil {
 			fmt.Fprintf(os.Stderr, "tabb: %v\n", err)
 			os.Exit(1)
 		}
@@ -25,7 +27,7 @@ func main() {
 	var err error
 	switch os.Args[1] {
 	case "host":
-		err = runHost()
+		err = runHost("")
 	case "list", "ls":
 		err = runList(os.Args[2:])
 	case "show":

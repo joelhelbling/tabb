@@ -18,7 +18,7 @@ import (
 // runHost is the Native Messaging host entry point. Chrome launches this binary
 // and communicates over stdin/stdout. It also creates a Unix socket so CLI/MCP
 // clients can send requests that get forwarded to the extension.
-func runHost() error {
+func runHost(extensionID string) error {
 	log.SetOutput(os.Stderr)
 	log.SetPrefix("tabb-host: ")
 
@@ -28,16 +28,16 @@ func runHost() error {
 	}
 
 	// Start reading from stdin (messages from the Chrome extension)
-	go readFromExtension(pending)
+	go readFromExtension(pending, extensionID)
 
 	// Start the Unix socket server
-	ln, err := socket.Listen()
+	ln, err := socket.Listen(extensionID)
 	if err != nil {
 		return fmt.Errorf("starting socket server: %w", err)
 	}
 	defer func() {
 		ln.Close()
-		socket.Cleanup()
+		socket.Cleanup(extensionID)
 	}()
 
 	// Handle graceful shutdown
@@ -46,7 +46,7 @@ func runHost() error {
 	go func() {
 		<-sigCh
 		ln.Close()
-		socket.Cleanup()
+		socket.Cleanup(extensionID)
 		os.Exit(0)
 	}()
 
@@ -63,12 +63,12 @@ func runHost() error {
 
 // readFromExtension reads Native Messaging responses from the Chrome extension
 // on stdin and dispatches them to waiting socket clients.
-func readFromExtension(pending *pendingRequests) {
+func readFromExtension(pending *pendingRequests, extensionID string) {
 	for {
 		msg, err := native.ReadMessage(os.Stdin)
 		if err != nil {
 			log.Printf("extension disconnected: %v", err)
-			socket.Cleanup()
+			socket.Cleanup(extensionID)
 			os.Exit(0)
 		}
 
