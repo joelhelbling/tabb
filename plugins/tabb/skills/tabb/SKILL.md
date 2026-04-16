@@ -22,6 +22,20 @@ description: Use when the user mentions the browser tabs they currently have ope
 3. **Use `show_tab` sparingly** — usually for the 3–10 tabs that matter. Prefer the Readability-extracted mode (the default); only use raw DOM when Readability fails or the user explicitly asks.
 4. **Never close tabs without explicit confirmation.** After using tab content to answer a question, it's often helpful to ask the user if they'd like you to close the tabs you just consumed — but wait for a clear yes before calling `close_tab`. Skip pinned tabs unless the user says otherwise.
 
+## CLI
+
+The `tabb` binary that powers the MCP server is also a full CLI. If the MCP server is available, the CLI is too — they're the same binary. Prefer the MCP tools for interactive use, but reach for the CLI via Bash when you need to batch operations, pipe output, write scripts, or use `--json` for structured data.
+
+```
+tabb [--profile <name>] list [--json] [filter]   List open tabs
+tabb [--profile <name>] show <tab-id> [--raw]    Show tab content as markdown
+tabb [--profile <name>] close <tab-id>           Close a tab
+tabb [--profile <name>] focus <tab-id> [--reload] Focus a tab (bring to foreground)
+tabb profiles                                     List configured profiles
+```
+
+`list --json` is particularly useful for scripting — it outputs a JSON array of tab objects.
+
 ## Notes
 
 - The user may have configured a **tabignore** list; those tabs are filtered out by the extension before they reach the MCP server. You never see them, and that's intentional — don't work around it.
