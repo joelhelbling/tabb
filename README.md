@@ -180,9 +180,15 @@ tabb host
 
 ## Changelog
 
+### 2026-04-16
+
+- **`focus_tab`** — New tool/command across extension, MCP server, and CLI. Activates a tab and brings its window to the foreground. Pass `reload: true` (CLI: `--reload`) to also refresh the page — useful for finding a lost tab or retrying a `show_tab` that failed due to page restrictions.
+- **Skill: CLI documentation** — The tabb skill now documents the CLI as a first-class alternative to the MCP tools, so agents consider shell scripting for batch operations and piped workflows.
+- **Plugin v0.2.0** — Bumped plugin version so existing installs pick up skill updates.
+
 ### 2026-04-15
 
-- **Profile-ID handshake** — Fixed a bug where Chromium browsers that reuse the same extension ID across profiles (notably Vivaldi) would collide on the same Unix socket. The extension now generates a per-profile UUID stored in `chrome.storage.local` and sends it in the handshake. Sockets are keyed on `profileId` instead of `extensionId`. `profiles.json` upgraded to a structured schema; legacy format is detected and migrated on next `tabb setup`.
+- **Multi-browser / Multi-profile support** — Fixed a bug where Chromium browsers that reuse the same extension ID across profiles (notably Vivaldi) would collide on the same Unix socket. The extension now generates a per-profile UUID stored in `chrome.storage.local` and sends it in the handshake. Sockets are keyed on `profileId` instead of `extensionId`. `profiles.json` upgraded to a structured schema; legacy format is detected and migrated on next `tabb setup`.
 - **Plugin marketplace layout** — Moved Claude Code plugin assets into `plugins/tabb/` so `/plugin install tabb` no longer copies Go source, Makefile, or extension code into users' plugin caches. Added `.claude-plugin/marketplace.json` so the repo can be added as a marketplace.
 - **tabb skill** — Added a discoverability skill (`plugins/tabb/skills/tabb/SKILL.md`) that teaches Claude Code to reach for the tabb MCP server when the user mentions their open browser tabs.
 - **MCP profile support** — Added a `list_profiles` tool and an optional `profile` parameter on `list_tabs`, `show_tab`, and `close_tab` so the AI can target a specific browser profile.
