@@ -12,6 +12,7 @@ description: Use when the user mentions the browser tabs they currently have ope
 - **`list_profiles`** — returns the user's registered browser profiles (name, browser, profileId, active status). Call this when you need to disambiguate between profiles or when a tool returns a "multiple profiles" error.
 - **`list_tabs`** — returns metadata for every open tab (id, title, url, window, pinned). Supports a `filter` string that matches titles and URLs case-insensitively. Call this **first** to survey what's there.
 - **`show_tab`** — returns one tab's content as markdown. Token-heavy: a single long article can be thousands of tokens. Call this only after you've narrowed the set with `list_tabs`.
+- **`focus_tab`** — brings a tab to the foreground (activates it and focuses its window). Pass `reload: true` to also refresh the page. Not destructive — safe to call without confirmation. Useful when the user wants to find a tab or when retrying a `show_tab` that failed due to page restrictions.
 - **`close_tab`** — closes one tab by id. Destructive from the user's perspective (they lose their place). Only call after explicit user confirmation.
 
 ## Usage pattern

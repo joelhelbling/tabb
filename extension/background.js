@@ -61,6 +61,8 @@ async function dispatch(msg) {
       return await showTab(msg);
     case "close_tab":
       return await closeTab(msg);
+    case "focus_tab":
+      return await focusTab(msg);
     case "handshake":
       return { id: msg.id, data: { ok: true } };
     default:
@@ -164,6 +166,23 @@ async function closeTab(msg) {
 
   await chrome.tabs.remove(tabId);
   return { id: msg.id, data: { closed: true } };
+}
+
+// --- focus_tab ---
+
+async function focusTab(msg) {
+  const tabId = msg.params?.tabId;
+  if (!tabId) return { id: msg.id, error: "tabId is required" };
+
+  const tab = await chrome.tabs.update(tabId, { active: true });
+  await chrome.windows.update(tab.windowId, { focused: true });
+
+  const reloaded = msg.params?.reload || false;
+  if (reloaded) {
+    await chrome.tabs.reload(tabId);
+  }
+
+  return { id: msg.id, data: { focused: true, reloaded } };
 }
 
 // --- Helpers ---

@@ -34,6 +34,8 @@ func main() {
 		err = runShow(cmdArgs[1:], profileFlag)
 	case "close":
 		err = runClose(cmdArgs[1:], profileFlag)
+	case "focus":
+		err = runFocus(cmdArgs[1:], profileFlag)
 	case "mcp":
 		err = runMCP()
 	case "profiles":
@@ -81,6 +83,7 @@ Usage:
   tabb [--profile <name>] list [--json] [filter]   List open tabs
   tabb [--profile <name>] show <tab-id> [--raw]    Show tab content as markdown
   tabb [--profile <name>] close <tab-id>           Close a tab
+  tabb [--profile <name>] focus <tab-id> [--reload]  Focus a tab (bring to foreground)
   tabb profiles                                     List configured profiles
   tabb mcp                                          Run as MCP stdio server
   tabb setup                                        Install Native Messaging host manifest

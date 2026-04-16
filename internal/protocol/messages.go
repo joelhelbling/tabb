@@ -44,5 +44,6 @@ const (
 	ActionListTabs  = "list_tabs"
 	ActionShowTab   = "show_tab"
 	ActionCloseTab  = "close_tab"
+	ActionFocusTab  = "focus_tab"
 	ActionHandshake = "handshake"
 )
