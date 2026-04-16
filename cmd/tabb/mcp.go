@@ -3,10 +3,14 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"sort"
 
+	"github.com/joelhelbling/tabb/internal/profile"
 	"github.com/joelhelbling/tabb/internal/protocol"
+	"github.com/joelhelbling/tabb/internal/socket"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -19,10 +23,20 @@ func runMCP() error {
 	)
 
 	s.AddTool(
+		mcp.NewTool("list_profiles",
+			mcp.WithDescription("List all tabb browser profiles the user has registered. Call this when the user refers to a specific profile (e.g. 'my Brave tabs', 'my work browser') or when another tool returns a 'multiple profiles' error. Returns each profile's name, browser, profileId, and whether it currently has a live socket (active=true means Chrome is running with the tabb extension loaded for that profile)."),
+		),
+		handleListProfiles,
+	)
+
+	s.AddTool(
 		mcp.NewTool("list_tabs",
 			mcp.WithDescription("List all open Chrome browser tabs. Returns metadata for each tab including ID, title, URL, and status. Use the filter parameter to search by title or URL."),
 			mcp.WithString("filter",
 				mcp.Description("Optional text to filter tabs by title or URL"),
+			),
+			mcp.WithString("profile",
+				mcp.Description("Optional profile name (case-insensitive) to target a specific browser profile. If omitted, tabb auto-detects when exactly one profile is active. Call list_profiles first if you need to know what's available."),
 			),
 		),
 		handleListTabs,
@@ -38,6 +52,9 @@ func runMCP() error {
 			mcp.WithBoolean("raw",
 				mcp.Description("If true, return full DOM as markdown instead of Readability-extracted content"),
 			),
+			mcp.WithString("profile",
+				mcp.Description("Optional profile name (case-insensitive) to target a specific browser profile. If omitted, tabb auto-detects when exactly one profile is active. Call list_profiles first if you need to know what's available."),
+			),
 		),
 		handleShowTab,
 	)
@@ -48,6 +65,9 @@ func runMCP() error {
 			mcp.WithNumber("tab_id",
 				mcp.Required(),
 				mcp.Description("The tab ID to close (from list_tabs results)"),
+			),
+			mcp.WithString("profile",
+				mcp.Description("Optional profile name (case-insensitive) to target a specific browser profile. If omitted, tabb auto-detects when exactly one profile is active. Call list_profiles first if you need to know what's available."),
 			),
 		),
 		handleCloseTab,
@@ -60,8 +80,8 @@ func runMCP() error {
 	return nil
 }
 
-func mcpRequest(action string, params map[string]any) (*protocol.Response, error) {
-	conn, err := resolveAndDial("")
+func mcpRequest(action string, params map[string]any, profile string) (*protocol.Response, error) {
+	conn, err := resolveAndDial(profile)
 	if err != nil {
 		return nil, err
 	}
@@ -75,13 +95,64 @@ func mcpRequest(action string, params map[string]any) (*protocol.Response, error
 	return doRequest(conn, req)
 }
 
+func handleListProfiles(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	tabbDir, err := socket.Dir()
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to locate tabb directory: %v", err)), nil
+	}
+
+	profiles, err := profile.Load(profile.ProfilesPath(tabbDir))
+	if err != nil {
+		if errors.Is(err, profile.ErrLegacySchema) {
+			return mcp.NewToolResultError("profiles.json is in legacy format; please run 'tabb setup' to migrate."), nil
+		}
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to load profiles: %v", err)), nil
+	}
+
+	activeIDs, err := profile.ActiveSockets(tabbDir)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to read active sockets: %v", err)), nil
+	}
+	activeSet := make(map[string]bool, len(activeIDs))
+	for _, id := range activeIDs {
+		activeSet[id] = true
+	}
+
+	names := make([]string, 0, len(profiles))
+	for name := range profiles {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	type profileOut struct {
+		Name      string `json:"name"`
+		Browser   string `json:"browser"`
+		ProfileID string `json:"profileId"`
+		Active    bool   `json:"active"`
+	}
+	out := make([]profileOut, 0, len(names))
+	for _, name := range names {
+		e := profiles[name]
+		out = append(out, profileOut{
+			Name:      name,
+			Browser:   e.Browser,
+			ProfileID: e.ProfileID,
+			Active:    activeSet[e.ProfileID],
+		})
+	}
+
+	data, _ := json.MarshalIndent(out, "", "  ")
+	return mcp.NewToolResultText(string(data)), nil
+}
+
 func handleListTabs(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	params := map[string]any{}
 	if filter := request.GetString("filter", ""); filter != "" {
 		params["filter"] = filter
 	}
+	profileName := request.GetString("profile", "")
 
-	resp, err := mcpRequest(protocol.ActionListTabs, params)
+	resp, err := mcpRequest(protocol.ActionListTabs, params, profileName)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to list tabs: %v", err)), nil
 	}
@@ -97,13 +168,14 @@ func handleShowTab(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallT
 	}
 
 	raw := request.GetBool("raw", false)
+	profileName := request.GetString("profile", "")
 
 	params := map[string]any{
 		"tabId": int(tabID),
 		"raw":   raw,
 	}
 
-	resp, err := mcpRequest(protocol.ActionShowTab, params)
+	resp, err := mcpRequest(protocol.ActionShowTab, params, profileName)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to show tab: %v", err)), nil
 	}
@@ -127,11 +199,12 @@ func handleCloseTab(ctx context.Context, request mcp.CallToolRequest) (*mcp.Call
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
+	profileName := request.GetString("profile", "")
 	params := map[string]any{
 		"tabId": int(tabID),
 	}
 
-	_, err = mcpRequest(protocol.ActionCloseTab, params)
+	_, err = mcpRequest(protocol.ActionCloseTab, params, profileName)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to close tab: %v", err)), nil
 	}

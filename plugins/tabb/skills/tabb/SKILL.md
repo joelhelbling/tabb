@@ -9,6 +9,7 @@ description: Use when the user mentions the browser tabs they currently have ope
 
 ## Tools
 
+- **`list_profiles`** — returns the user's registered browser profiles (name, browser, profileId, active status). Call this when you need to disambiguate between profiles or when a tool returns a "multiple profiles" error.
 - **`list_tabs`** — returns metadata for every open tab (id, title, url, window, pinned). Supports a `filter` string that matches titles and URLs case-insensitively. Call this **first** to survey what's there.
 - **`show_tab`** — returns one tab's content as markdown. Token-heavy: a single long article can be thousands of tokens. Call this only after you've narrowed the set with `list_tabs`.
 - **`close_tab`** — closes one tab by id. Destructive from the user's perspective (they lose their place). Only call after explicit user confirmation.
@@ -23,5 +24,5 @@ description: Use when the user mentions the browser tabs they currently have ope
 ## Notes
 
 - The user may have configured a **tabignore** list; those tabs are filtered out by the extension before they reach the MCP server. You never see them, and that's intentional — don't work around it.
-- If the user has multiple browser profiles registered, `list_tabs` returns tabs from the currently-active profile. If they need tabs from a different profile they'll say so; you don't choose.
+- **Profiles**: if the user has registered more than one browser profile, tabb can't auto-pick one. Call `list_profiles` to see what's available (name, browser, active status), then pass `profile: "<name>"` to `list_tabs` / `show_tab` / `close_tab`. If the user refers to a specific profile by name ("my Brave tabs", "my work browser"), pass it directly without the extra round trip. If a tool call returns an error like "multiple active tabb profiles found", that's your cue to call `list_profiles` and retry with an explicit `profile`.
 - If `list_tabs` returns an error about no active profile or missing socket, tell the user to make sure Chrome is running with the tabb extension loaded. Don't try to fix their setup from a skill.
