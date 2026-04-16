@@ -45,7 +45,7 @@ of that cache.
 
 - Go code uses standard library where possible
 - Extension is vanilla JS (no build step)
-- Unix socket path: `~/.tabb/<extensionId>.sock` (one per browser/profile)
+- Unix socket path: `~/.tabb/<profileId>.sock` (one per browser/profile)
 - Native Messaging host name: `com.tabb`
 - CLI output: human-readable by default, `--json` flag for machine-readable
 - `show` outputs markdown with YAML frontmatter
@@ -54,6 +54,7 @@ of that cache.
 
 - `tabb [--profile <name>] list` — list tab metadata
 - `tabb [--profile <name>] show <tab-id>` — page content as markdown (Readability mode), `--raw` for full DOM
+- `tabb [--profile <name>] focus <tab-id> [--reload]` — bring a tab to the foreground, optionally reload
 - `tabb [--profile <name>] close <tab-id>` — close a tab
 - `tabb profiles` — list configured profiles and their status
 - `tabb mcp` — run as MCP stdio server

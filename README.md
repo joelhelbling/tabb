@@ -82,6 +82,12 @@ tabb show 12345 --raw
 # Close a tab
 tabb close 12345
 
+# Focus a tab (bring to foreground)
+tabb focus 12345
+
+# Focus and reload a tab
+tabb focus 12345 --reload
+
 # List configured profiles
 tabb profiles
 ```
@@ -115,10 +121,12 @@ Add to your Claude Code MCP config (`~/.claude/settings.json` or project `.mcp.j
 }
 ```
 
-This exposes three tools to Claude:
+This exposes tools to Claude:
 - **list_tabs** — list open tabs with optional filter
 - **show_tab** — get tab content as markdown
+- **focus_tab** — bring a tab to the foreground, optionally reload it
 - **close_tab** — close a tab
+- **list_profiles** — list registered browser profiles and their status
 
 ### Claude Code Plugin
 
