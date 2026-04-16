@@ -153,7 +153,7 @@ Tabignore lets you hide sensitive tabs from tabb. Ignored tabs are filtered **in
 
 ## Security
 
-- **Unix sockets** (`~/.tabb/<extensionId>.sock`) have mode `0600` — only your user can connect. Same trust model as `~/.ssh`.
+- **Unix sockets** (`~/.tabb/<profileId>.sock`) have mode `0600` — only your user can connect. Same trust model as `~/.ssh`.
 - **Tabignore filtering** happens in the extension before data leaves Chrome. Ignored tab URLs and content never reach the socket.
 - **No network exposure** — the binary uses Native Messaging (stdin/stdout) and a Unix domain socket. No TCP ports are opened.
 - **Extension permissions**: `tabs` (list tabs), `scripting` (read page content), `nativeMessaging`, `contextMenus`, `storage`. The `scripting` permission is required for content extraction and is only used by your local extension code.
@@ -169,6 +169,16 @@ tabb host
 
 # The extension auto-reconnects every 5 seconds if the host isn't running
 ```
+
+## Changelog
+
+### 2026-04-15
+
+- **Profile-ID handshake** — Fixed a bug where Chromium browsers that reuse the same extension ID across profiles (notably Vivaldi) would collide on the same Unix socket. The extension now generates a per-profile UUID stored in `chrome.storage.local` and sends it in the handshake. Sockets are keyed on `profileId` instead of `extensionId`. `profiles.json` upgraded to a structured schema; legacy format is detected and migrated on next `tabb setup`.
+- **Plugin marketplace layout** — Moved Claude Code plugin assets into `plugins/tabb/` so `/plugin install tabb` no longer copies Go source, Makefile, or extension code into users' plugin caches. Added `.claude-plugin/marketplace.json` so the repo can be added as a marketplace.
+- **tabb skill** — Added a discoverability skill (`plugins/tabb/skills/tabb/SKILL.md`) that teaches Claude Code to reach for the tabb MCP server when the user mentions their open browser tabs.
+- **MCP profile support** — Added a `list_profiles` tool and an optional `profile` parameter on `list_tabs`, `show_tab`, and `close_tab` so the AI can target a specific browser profile.
+- **Setup flow** — `tabb setup` now detects new profiles by reload-and-scan instead of requiring the user to paste an extension ID.
 
 ## License
 
