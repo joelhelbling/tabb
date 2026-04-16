@@ -73,6 +73,23 @@ func runMCP() error {
 		handleCloseTab,
 	)
 
+	s.AddTool(
+		mcp.NewTool("focus_tab",
+			mcp.WithDescription("Bring a Chrome tab to the foreground (activate it and focus its window). Optionally reload the tab. Useful when the user wants to find a tab or retry a failed show_tab."),
+			mcp.WithNumber("tab_id",
+				mcp.Required(),
+				mcp.Description("The tab ID (from list_tabs results)"),
+			),
+			mcp.WithBoolean("reload",
+				mcp.Description("If true, also reload the tab after focusing it"),
+			),
+			mcp.WithString("profile",
+				mcp.Description("Optional profile name (case-insensitive) to target a specific browser profile. If omitted, tabb auto-detects when exactly one profile is active. Call list_profiles first if you need to know what's available."),
+			),
+		),
+		handleFocusTab,
+	)
+
 	if err := server.ServeStdio(s); err != nil {
 		fmt.Fprintf(os.Stderr, "tabb mcp server error: %v\n", err)
 		return err
@@ -190,6 +207,32 @@ func handleShowTab(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallT
 	result := fmt.Sprintf("---\ntitle: %q\nurl: %s\ntab_id: %d\nstatus: %s\nactive: %t\npinned: %t\n---\n\n%s",
 		content.Title, content.URL, content.ID, content.Status, content.Active, content.Pinned, content.Content)
 
+	return mcp.NewToolResultText(result), nil
+}
+
+func handleFocusTab(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	tabID, err := request.RequireFloat("tab_id")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	prof := request.GetString("profile", "")
+	reload := request.GetBool("reload", false)
+
+	params := map[string]any{
+		"tabId":  int(tabID),
+		"reload": reload,
+	}
+
+	_, err = mcpRequest(protocol.ActionFocusTab, params, prof)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to focus tab: %v", err)), nil
+	}
+
+	result := fmt.Sprintf("Focused tab %d", int(tabID))
+	if reload {
+		result += " (reloaded)"
+	}
 	return mcp.NewToolResultText(result), nil
 }
 
