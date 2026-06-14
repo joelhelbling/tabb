@@ -46,13 +46,26 @@ mv tabb /usr/local/bin/
 tabb setup
 ```
 
-This writes a Native Messaging manifest to your Chrome config directory. It will prompt you to paste the extension ID from step 2 and ask you to name this profile (defaults to the browser name or "Default"). The extension ID and profile name are saved to `~/.tabb/profiles.json`.
+`tabb setup` walks you through two steps:
 
-Once setup is complete, reload the extension in Chrome. It will connect to the native host and a Unix socket will be created at `~/.tabb/<extensionId>.sock`.
+1. **Paste the extension ID** from step 2. The browser will only launch the native
+   host for extension origins explicitly listed in the manifest's `allowed_origins`,
+   so the ID must be authorized *before* the extension can connect. The manifest is
+   written to the Native Messaging directory of every Chromium-family browser it
+   detects on your machine (Chrome, Brave, Edge, Vivaldi, Opera, Arc, Chromium…).
+2. **Reload the extension** when prompted. It connects to the now-authorized host,
+   which records the profile so setup can detect it and ask you to name it (defaults
+   to the browser name or "Default").
+
+The profile name and IDs are saved to `~/.tabb/profiles.json`, and a Unix socket is
+created at `~/.tabb/<profileId>.sock`.
 
 #### Multiple browsers / profiles
 
-Run `tabb setup` once per browser or Chrome profile. Each gets its own named profile and socket. All extension IDs are accumulated in the Native Messaging manifest's `allowed_origins`.
+Run `tabb setup` once per browser or Chrome profile. You can also paste several
+extension IDs in a single run — setup keeps prompting until you press Enter on an
+empty line. Each profile gets its own name and socket, and all extension IDs are
+accumulated in the Native Messaging manifest's `allowed_origins`.
 
 ```bash
 tabb setup   # first profile → "Default" (or browser name)
@@ -179,6 +192,10 @@ tabb host
 ```
 
 ## Changelog
+
+### 2026-05-31
+
+- **Fixed: `tabb setup` could never register a profile** — Two compounding bugs made first-time setup impossible. (1) The manifest was written with an empty `allowed_origins` before any extension was authorized, so the browser refused to launch the native host, so no profile was ever discovered — a chicken-and-egg deadlock introduced when the paste-the-ID step was removed. Setup now asks for the extension ID up front and authorizes it before you reload. (2) The manifest was only ever written to Google Chrome's directory; it's now written to every installed Chromium-family browser (Brave, Edge, Vivaldi, Opera, Arc, Chromium, and their beta/dev channels).
 
 ### 2026-04-16
 
