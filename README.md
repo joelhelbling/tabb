@@ -17,13 +17,27 @@ A thin Chrome extension talks to a Go binary via Chrome's Native Messaging proto
 
 ## Install
 
-### 1. Build the binary
+### 1. Install the binary
+
+**Homebrew** (macOS / Linux):
+
+```bash
+brew install joelhelbling/tap/tabb
+```
+
+**Install script** (downloads a release archive, verifies its checksum, installs to `~/.local/bin`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/joelhelbling/tabb/main/install.sh | sh
+```
+
+**From source** (requires Go):
 
 ```bash
 go install github.com/joelhelbling/tabb/cmd/tabb@latest
 ```
 
-Or build from source:
+Or clone and build:
 
 ```bash
 git clone https://github.com/joelhelbling/tabb.git

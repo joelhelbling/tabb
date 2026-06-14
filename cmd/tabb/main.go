@@ -42,6 +42,8 @@ func main() {
 		err = runProfiles()
 	case "setup":
 		err = runSetup()
+	case "version", "--version":
+		fmt.Println(Version)
 	case "help", "--help", "-h":
 		printUsage()
 	default:
@@ -87,6 +89,7 @@ Usage:
   tabb profiles                                     List configured profiles
   tabb mcp                                          Run as MCP stdio server
   tabb setup                                        Install Native Messaging host manifest
+  tabb version                                      Print the tabb version
   tabb help                                         Show this help
 
 Environment:

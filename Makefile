@@ -2,10 +2,10 @@ BINARY := tabb
 PKG    := ./cmd/tabb
 PREFIX ?= /usr/local
 
-.PHONY: build install uninstall test clean
+.PHONY: build install uninstall test clean release-snapshot
 
 build:
-	go build -o $(BINARY) $(PKG)
+	go build -ldflags "-X main.Version=dev" -o $(BINARY) $(PKG)
 
 install: build
 	install -d $(PREFIX)/bin
@@ -19,3 +19,6 @@ test:
 
 clean:
 	rm -f $(BINARY)
+
+release-snapshot:
+	goreleaser release --snapshot --clean

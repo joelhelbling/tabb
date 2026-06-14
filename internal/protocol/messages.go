@@ -20,17 +20,17 @@ type Response struct {
 
 // Tab represents metadata for a single browser tab.
 type Tab struct {
-	ID        int    `json:"id"`
-	WindowID  int    `json:"windowId"`
-	Title     string `json:"title"`
-	URL       string `json:"url"`
-	Status    string `json:"status"`
-	Active    bool   `json:"active"`
-	Pinned    bool   `json:"pinned"`
-	Audible   bool   `json:"audible"`
-	Discarded bool   `json:"discarded"`
+	ID         int    `json:"id"`
+	WindowID   int    `json:"windowId"`
+	Title      string `json:"title"`
+	URL        string `json:"url"`
+	Status     string `json:"status"`
+	Active     bool   `json:"active"`
+	Pinned     bool   `json:"pinned"`
+	Audible    bool   `json:"audible"`
+	Discarded  bool   `json:"discarded"`
 	FavIconURL string `json:"favIconUrl,omitempty"`
-	Index     int    `json:"index"`
+	Index      int    `json:"index"`
 }
 
 // TabContent represents the full content of a tab, returned by show_tab.
