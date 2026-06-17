@@ -15,5 +15,6 @@
 
 # Build
 dist/
+tabb-extension.zip
 
 .claude/worktrees

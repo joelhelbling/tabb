@@ -4,6 +4,9 @@ version: 2
 before:
   hooks:
     - go mod tidy
+    # Bundle the unpacked Chrome extension so Homebrew/install.sh users
+    # (who never clone the repo) can download it from the release.
+    - sh -c 'rm -f tabb-extension.zip && zip -qr tabb-extension.zip extension'
 
 builds:
   - id: tabb
@@ -81,3 +84,5 @@ release:
   draft: false
   prerelease: auto
   name_template: "{{.Tag}}"
+  extra_files:
+    - glob: ./tabb-extension.zip

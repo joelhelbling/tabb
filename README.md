@@ -47,14 +47,28 @@ go build -o tabb ./cmd/tabb
 mv tabb /usr/local/bin/
 ```
 
-### 2. Load the extension
+### 2. Get the extension
+
+If you installed from source, you already have the `extension/` directory — skip
+to "Load the extension" below.
+
+If you installed via Homebrew or the install script, download the unpacked
+extension from the latest release and unzip it:
+
+```bash
+curl -fsSL -o tabb-extension.zip \
+  https://github.com/joelhelbling/tabb/releases/latest/download/tabb-extension.zip
+unzip tabb-extension.zip   # creates ./extension
+```
+
+### 3. Load the extension
 
 1. Open `chrome://extensions` in Chrome
 2. Enable **Developer mode** (toggle in top right)
-3. Click **Load unpacked** and select the `extension/` directory from this repo
+3. Click **Load unpacked** and select the `extension/` directory
 4. Note the **extension ID** shown on the extensions page
 
-### 3. Set up Native Messaging
+### 4. Set up Native Messaging
 
 ```bash
 tabb setup
@@ -62,7 +76,7 @@ tabb setup
 
 `tabb setup` walks you through two steps:
 
-1. **Paste the extension ID** from step 2. The browser will only launch the native
+1. **Paste the extension ID** from step 3. The browser will only launch the native
    host for extension origins explicitly listed in the manifest's `allowed_origins`,
    so the ID must be authorized *before* the extension can connect. The manifest is
    written to the Native Messaging directory of every Chromium-family browser it
